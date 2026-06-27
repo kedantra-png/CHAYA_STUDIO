@@ -441,7 +441,7 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
             
             <div className="bg-white p-4 rounded-sm shadow-inner mb-6">
               <QRCodeSVG 
-                value={typeof window !== 'undefined' ? `${window.location.origin}/album/${album.id}` : `https://chaya.studio/album/${album.id}`}
+                value={typeof window !== 'undefined' ? `${window.location.origin}${album.qr_code}` : `https://chaya.studio${album.qr_code}`}
                 size={200}
                 bgColor={"#ffffff"}
                 fgColor={"#000000"}

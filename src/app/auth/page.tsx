@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Mail, Sparkles } from "@/components/icons";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -18,16 +18,18 @@ export default function AdminLoginPage() {
     setError("");
 
     try {
-      // 1. Try real Supabase live auth
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // 1. Try real Supabase live auth (only if configured)
+      if (isSupabaseConfigured) {
+        const { data, error: authError } = await supabase!.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      if (!authError && data.user) {
-        localStorage.setItem("chaya_admin_logged_in", "true");
-        router.push("/dashboard");
-        return;
+        if (!authError && data.user) {
+          localStorage.setItem("chaya_admin_logged_in", "true");
+          router.push("/dashboard");
+          return;
+        }
       }
 
       // 2. Demo fallback
@@ -82,7 +84,7 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded px-10 py-3.5 text-sm text-white focus:outline-none focus:border-gold-primary/50 transition-all font-sans"
-                placeholder="admin@chaya.studio"
+                placeholder="admin@example.com"
               />
             </div>
           </div>

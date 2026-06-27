@@ -8,6 +8,7 @@ export interface Album {
   date: string;
   location: string;
   cover_image: string;
+  qr_code_id: string;
   qr_code: string;
   status: 'draft' | 'published';
   created_at: string;
@@ -20,6 +21,19 @@ export interface Album {
   background_music: string;
   password?: string;
   expiry_date?: string;
+}
+
+function generateQRCodeId(existingIds: string[] = []): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const idSet = new Set(existingIds);
+  let result: string;
+  do {
+    result = '';
+    for (let i = 0; i < 10; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+  } while (idSet.has(result));
+  return result;
 }
 
 export interface AlbumPage {
@@ -81,7 +95,8 @@ const DEFAULT_ALBUMS: Album[] = [
     date: "2026-11-12",
     location: "City Palace, Udaipur",
     cover_image: SAMPLE_PHOTOS[0],
-    qr_code: "",
+    qr_code_id: "kR7mBx2LpQ",
+    qr_code: "/album/kR7mBx2LpQ",
     status: "published",
     created_at: new Date().toISOString(),
     theme: "royal",
@@ -99,7 +114,8 @@ const DEFAULT_ALBUMS: Album[] = [
     date: "2026-08-24",
     location: "The Glasshouse, New York",
     cover_image: SAMPLE_PHOTOS[2],
-    qr_code: "",
+    qr_code_id: "aJ4nWx6TyR",
+    qr_code: "/album/aJ4nWx6TyR",
     status: "published",
     created_at: new Date().toISOString(),
     theme: "modern",
@@ -117,7 +133,8 @@ const DEFAULT_ALBUMS: Album[] = [
     date: "2026-05-18",
     location: "Villa d'Este, Lake Como",
     cover_image: SAMPLE_PHOTOS[7],
-    qr_code: "",
+    qr_code_id: "zP9mDx4KwS",
+    qr_code: "/album/zP9mDx4KwS",
     status: "published",
     created_at: new Date().toISOString(),
     theme: "classic",
@@ -214,6 +231,25 @@ class HybridDatabase {
         this.setLocal(`chaya_pages_${album.id}`, getInitialPages(album.id));
         this.setLocal(`chaya_media_${album.id}`, getInitialMedia(album.id));
       });
+    } else {
+      this.backfillQRCodeIds(albums);
+    }
+  }
+
+  private backfillQRCodeIds(albums: Album[]) {
+    const existingQRIds = albums.map(a => a.qr_code_id).filter(Boolean);
+    let changed = false;
+    const updated = albums.map(a => {
+      if (!a.qr_code_id) {
+        changed = true;
+        const qr_code_id = generateQRCodeId(existingQRIds);
+        existingQRIds.push(qr_code_id);
+        return { ...a, qr_code_id, qr_code: `/album/${qr_code_id}` };
+      }
+      return a;
+    });
+    if (changed) {
+      this.setLocal("chaya_albums", updated);
     }
   }
 
@@ -239,16 +275,21 @@ class HybridDatabase {
         const { data, error } = await supabase.from("albums").select("*").eq("id", id).maybeSingle();
         if (error) throw error;
         if (data) return data as Album;
+        const { data: qrData, error: qrError } = await supabase.from("albums").select("*").eq("qr_code_id", id).maybeSingle();
+        if (!qrError && qrData) return qrData as Album;
       } catch (err) {
         console.warn("Supabase Fetch failed, falling back to LocalStorage:", err);
       }
     }
     this.seedLocalIfEmpty();
-    return this.getLocal<Album[]>("chaya_albums", []).find(a => a.id === id);
+    return this.getLocal<Album[]>("chaya_albums", []).find(a => a.id === id || a.qr_code_id === id);
   }
 
   async createAlbum(album: Partial<Album> & { title: string; client_name: string }): Promise<Album> {
     const id = album.id || album.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Math.random().toString(36).substr(2, 6);
+    const existing = this.getLocal<Album[]>("chaya_albums", []);
+    const existingQRIds = existing.map(a => a.qr_code_id).filter(Boolean);
+    const qr_code_id = album.qr_code_id || generateQRCodeId(existingQRIds);
     const newAlbum: Album = {
       id,
       title: album.title,
@@ -256,7 +297,8 @@ class HybridDatabase {
       date: album.date || new Date().toISOString().split('T')[0],
       location: album.location || "Chaya Studio",
       cover_image: album.cover_image || SAMPLE_PHOTOS[0],
-      qr_code: `/album/${id}`,
+      qr_code_id,
+      qr_code: `/album/${qr_code_id}`,
       status: album.status || 'draft',
       created_at: new Date().toISOString(),
       theme: album.theme || 'luxury',
@@ -297,6 +339,17 @@ class HybridDatabase {
   }
 
   async updateAlbum(id: string, updates: Partial<Album>): Promise<Album> {
+    const localAlbums = this.getLocal<Album[]>("chaya_albums", []);
+    const existing = localAlbums.find(a => a.id === id);
+    const existingQRIds = localAlbums.map(a => a.qr_code_id).filter(Boolean);
+
+    if (!updates.qr_code_id && existing && !existing.qr_code_id) {
+      updates.qr_code_id = generateQRCodeId(existingQRIds);
+    }
+    if (updates.qr_code_id && !updates.qr_code) {
+      updates.qr_code = `/album/${updates.qr_code_id}`;
+    }
+
     if (this.useSupabase) {
       try {
         const { data, error } = await supabase.from("albums").update(updates).eq("id", id).select().single();
@@ -306,7 +359,6 @@ class HybridDatabase {
       }
     }
 
-    const localAlbums = this.getLocal<Album[]>("chaya_albums", []);
     const index = localAlbums.findIndex(a => a.id === id);
     if (index === -1) throw new Error("Album not found");
 
@@ -482,11 +534,11 @@ export const db = {
       const albums = localStorage.getItem("chaya_albums");
       if (albums) {
         const list = JSON.parse(albums) as Album[];
-        const found = list.find(a => a.id === id);
+        const found = list.find(a => a.id === id || a.qr_code_id === id);
         if (found) return found;
       }
     }
-    return DEFAULT_ALBUMS.find(a => a.id === id);
+    return DEFAULT_ALBUMS.find(a => a.id === id || a.qr_code_id === id);
   },
 
   createAlbum: (album: Partial<Album> & { title: string; client_name: string }) => {
@@ -494,6 +546,11 @@ export const db = {
     localDB.createAlbum(album);
     // Write synchronous copy immediately for Next.js layout updates
     const id = album.id || album.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Math.random().toString(36).substr(2, 6);
+    const existingList = typeof window !== "undefined"
+      ? JSON.parse(localStorage.getItem("chaya_albums") || "[]") as Album[]
+      : [];
+    const existingQRIds = existingList.map(a => a.qr_code_id).filter(Boolean);
+    const qr_code_id = album.qr_code_id || generateQRCodeId(existingQRIds);
     const newAlbum: Album = {
       id,
       title: album.title,
@@ -501,7 +558,8 @@ export const db = {
       date: album.date || new Date().toISOString().split('T')[0],
       location: album.location || "Chaya Studio",
       cover_image: album.cover_image || SAMPLE_PHOTOS[0],
-      qr_code: `/album/${id}`,
+      qr_code_id,
+      qr_code: `/album/${qr_code_id}`,
       status: album.status || 'draft',
       created_at: new Date().toISOString(),
       theme: album.theme || 'luxury',
@@ -529,7 +587,15 @@ export const db = {
       const list = JSON.parse(localStorage.getItem("chaya_albums") || "[]") as Album[];
       const idx = list.findIndex(a => a.id === id);
       if (idx !== -1) {
-        list[idx] = { ...list[idx], ...updates };
+        const existing = list[idx];
+        const existingQRIds = list.map(a => a.qr_code_id).filter(Boolean);
+        if (!updates.qr_code_id && !existing.qr_code_id) {
+          updates.qr_code_id = generateQRCodeId(existingQRIds);
+        }
+        if (updates.qr_code_id && !updates.qr_code) {
+          updates.qr_code = `/album/${updates.qr_code_id}`;
+        }
+        list[idx] = { ...existing, ...updates };
         localStorage.setItem("chaya_albums", JSON.stringify(list));
         return list[idx];
       }

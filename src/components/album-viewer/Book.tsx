@@ -1,6 +1,6 @@
 "use client";
 
-import React, { forwardRef } from "react";
+import React, { forwardRef, useState, useCallback } from "react";
 import { Album, AlbumPage, MediaItem } from "@/lib/db";
 
 interface PageProps {
@@ -8,10 +8,59 @@ interface PageProps {
   page?: AlbumPage;
   media?: MediaItem[];
   isCover?: boolean;
+  currentPage?: number;
+  visiblePage?: number;
 }
 
-export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media = [], isCover }, ref) => {
+function LazyImage({ src, alt, className, preload }: { src?: string; alt: string; className?: string; preload?: boolean }) {
+  const [loaded, setLoaded] = useState(false);
+
+  const onLoad = useCallback(() => setLoaded(true), []);
+
+  if (!src) return null;
+
+  return (
+    <div className={`absolute inset-0 w-full h-full overflow-hidden ${className || ''}`}>
+      {!loaded && <div className="absolute inset-0 w-full h-full bg-stone-800/60 animate-pulse" />}
+      <img
+        src={src}
+        alt={alt}
+        loading={preload ? undefined : "lazy"}
+        decoding="async"
+        onLoad={onLoad}
+        className={`w-full h-full object-cover transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+      />
+    </div>
+  );
+}
+
+function VideoPlayer({ src, caption }: { src: string; caption?: string }) {
+  return (
+    <div className="w-full h-full relative">
+      <video
+        src={src}
+        className="w-full h-full object-cover"
+        controls
+        muted
+        playsInline
+        autoPlay
+        loop
+        preload="metadata"
+      />
+      {caption && (
+        <div className="absolute bottom-6 left-0 right-0 text-center">
+          <span className="bg-black/50 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-sans tracking-widest text-white/90">
+            {caption}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media = [], isCover, currentPage = 0, visiblePage = 0 }, ref) => {
   const pageMedia = page ? media.filter(m => m.page_id === page.id).sort((a, b) => a.order - b.order) : [];
+  const isNearVisible = Math.abs(currentPage - visiblePage) <= 2;
 
   return (
     <div className="page" ref={ref} style={{ backgroundColor: album.theme === 'luxury' ? '#111111' : '#141414' }}>
@@ -20,11 +69,12 @@ export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media 
         {/* Cover Page Styling */}
         {isCover ? (
           <div className="w-full h-full relative flex flex-col items-center justify-center">
-            {media[0] ? (
-              <img src={album.cover_image || media[0].url} className="absolute inset-0 w-full h-full object-cover opacity-60" />
-            ) : (
-              <div className="absolute inset-0 w-full h-full bg-gold-deep/20" />
-            )}
+            <div className="absolute inset-0 w-full h-full opacity-60">
+              {(album.cover_image || media[0]?.url) && (
+                <LazyImage src={album.cover_image || media[0]?.url} alt="Cover" preload />
+              )}
+              {!album.cover_image && !media[0] && <div className="absolute inset-0 w-full h-full bg-gold-deep/20" />}
+            </div>
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
             
             <div className="z-10 text-center px-8 pb-12 mt-auto">
@@ -35,36 +85,19 @@ export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media 
             </div>
           </div>
         ) : page ? (
-          /* Standard Page Styling */
           <>
             <div className="flex-1 w-full h-full relative overflow-hidden flex flex-col justify-center">
               {page.layout === 'video' && pageMedia[0]?.type === 'video' ? (
-                <div className="w-full h-full relative">
-                  <video
-                    src={pageMedia[0].url}
-                    className="w-full h-full object-cover"
-                    controls
-                    muted
-                    playsInline
-                    autoPlay
-                    loop
-                  />
-                  {pageMedia[0].caption && (
-                    <div className="absolute bottom-6 left-0 right-0 text-center">
-                      <span className="bg-black/50 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-sans tracking-widest text-white/90">
-                        {pageMedia[0].caption}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                <VideoPlayer src={pageMedia[0].url} caption={pageMedia[0].caption} />
               ) : page.layout === 'full-spread' && pageMedia[0] ? (
-                // Edge-to-edge full bleed image
                 <div className="w-full h-full relative overflow-hidden">
-                  <img
-                    src={pageMedia[0].url}
-                    alt={pageMedia[0].caption || ""}
-                    className="w-full h-full object-cover scale-105 hover:scale-100 transition-all duration-700"
-                  />
+                  <div className="w-full h-full scale-105 hover:scale-100 transition-all duration-700">
+                    <LazyImage
+                      src={isNearVisible ? pageMedia[0].url : undefined}
+                      alt={pageMedia[0].caption || ""}
+                      preload={currentPage <= 1}
+                    />
+                  </div>
                   {pageMedia[0].caption && (
                     <div className="absolute bottom-6 left-0 right-0 text-center">
                       <span className="bg-black/40 backdrop-blur-md px-4 py-1.5 rounded-full text-[9px] font-sans tracking-widest text-white/90">
@@ -74,23 +107,29 @@ export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media 
                   )}
                 </div>
               ) : page.layout === 'double' && pageMedia.length >= 2 ? (
-                // Two photos with elegant gap and margin
                 <div className="grid grid-rows-2 gap-4 h-full w-full p-8">
                   <div className="relative overflow-hidden h-full shadow-md">
-                    <img src={pageMedia[0].url} alt="" className="w-full h-full object-cover" />
+                    <LazyImage
+                      src={isNearVisible ? pageMedia[0].url : undefined}
+                      alt=""
+                      preload={currentPage <= 1}
+                    />
                   </div>
                   <div className="relative overflow-hidden h-full shadow-md">
-                    <img src={pageMedia[1].url} alt="" className="w-full h-full object-cover" />
+                    <LazyImage
+                      src={isNearVisible ? pageMedia[1].url : undefined}
+                      alt=""
+                      preload={currentPage <= 1}
+                    />
                   </div>
                 </div>
               ) : pageMedia[0] ? (
-                // Default layout/single photo (Clean elegant margin like a matted print)
                 <div className="w-full h-full relative flex flex-col p-8 pb-12">
                   <div className="flex-1 relative shadow-lg overflow-hidden">
-                    <img
-                      src={pageMedia[0].url}
+                    <LazyImage
+                      src={isNearVisible ? pageMedia[0].url : undefined}
                       alt={pageMedia[0].caption || ""}
-                      className="w-full h-full object-cover"
+                      preload={currentPage <= 1}
                     />
                   </div>
                   {pageMedia[0].caption && (
@@ -100,7 +139,6 @@ export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media 
                   )}
                 </div>
               ) : (
-                // Placeholder when page has no media
                 <div className="w-full h-full flex flex-col items-center justify-center p-8">
                   <div className={`w-full h-full border-2 border-dashed ${album.theme === 'luxury' ? 'border-white/10' : 'border-black/10'} flex items-center justify-center`}>
                     <span className="font-serif italic text-xs opacity-40">Blank Page</span>
@@ -109,7 +147,6 @@ export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media 
               )}
             </div>
 
-            {/* Floating Header / Text Content */}
             {page.title && (
               <div className="absolute top-8 left-8 right-8 z-10 text-center drop-shadow-md">
                 <h2 className="font-serif text-xl tracking-wide">{page.title}</h2>
@@ -117,7 +154,6 @@ export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media 
               </div>
             )}
 
-            {/* Footer page number */}
             <div className="absolute bottom-4 left-0 right-0 flex justify-between items-center px-8 text-[8px] font-sans tracking-widest opacity-30 select-none">
               <span>CHAYA STUDIO</span>
               <span>PAGE {page.page_number}</span>
@@ -125,7 +161,6 @@ export const Page = forwardRef<HTMLDivElement, PageProps>(({ album, page, media 
           </>
         ) : null}
 
-        {/* CSS Page Shadows / Highlights for physical realism */}
         <div className="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-black/20 to-transparent pointer-events-none" />
         <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-black/20 to-transparent pointer-events-none" />
         <div className="absolute inset-0 shadow-[inset_0_0_20px_rgba(0,0,0,0.1)] pointer-events-none" />

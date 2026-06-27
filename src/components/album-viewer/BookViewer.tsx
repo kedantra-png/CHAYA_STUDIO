@@ -34,6 +34,7 @@ export const BookViewer: React.FC<BookViewerProps> = ({
   const router = useRouter();
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [visiblePage, setVisiblePage] = useState(0);
   
   const bookRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -148,7 +149,11 @@ export const BookViewer: React.FC<BookViewerProps> = ({
           mobileScrollSupport={true}
           className="demo-book"
           ref={bookRef}
-          onFlip={playFlipSound}
+          onFlip={(e) => {
+            playFlipSound();
+            const pageNum = typeof e === 'number' ? e : (e?.data ?? 0);
+            setVisiblePage(pageNum);
+          }}
           drawShadow={true}
           flippingTime={1000}
           usePortrait={true}
@@ -161,15 +166,15 @@ export const BookViewer: React.FC<BookViewerProps> = ({
           disableFlipByClick={false}
         >
           {/* Cover Page */}
-          <Page album={album} media={media} isCover={true} />
+          <Page album={album} media={media} isCover={true} currentPage={0} visiblePage={visiblePage} />
 
           {/* Interior Pages */}
           {pages.map((page, i) => (
-            <Page key={page.id} album={album} page={page} media={media} />
+            <Page key={page.id} album={album} page={page} media={media} currentPage={i + 1} visiblePage={visiblePage} />
           ))}
 
           {/* Back Cover / End Page */}
-          <Page album={album} media={[]} isCover={false} page={{ id: "end", album_id: album.id, page_number: 999, layout: "single" }} />
+          <Page album={album} media={[]} isCover={false} currentPage={pages.length + 1} visiblePage={visiblePage} page={{ id: "end", album_id: album.id, page_number: 999, layout: "single" }} />
         </HTMLFlipBook>
       </div>
 

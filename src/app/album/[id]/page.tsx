@@ -48,11 +48,30 @@ export default function CustomerAlbumViewerPage({ params }: ViewerPageProps) {
       }
     }
 
-    // Set Album and subitems
+    // Set Album and subitems (use album.id (UUID) for data lookups)
     setAlbum(fetchedAlbum);
-    setPages(db.getPages(albumId).sort((a, b) => a.page_number - b.page_number));
-    setMedia(db.getMedia(albumId).sort((a, b) => a.order - b.order));
-    
+    const fetchedPages = db.getPages(fetchedAlbum.id).sort((a, b) => a.page_number - b.page_number);
+    const fetchedMedia = db.getMedia(fetchedAlbum.id).sort((a, b) => a.order - b.order);
+    setPages(fetchedPages);
+    setMedia(fetchedMedia);
+
+    // Preload critical images: cover + first spread
+    const urlsToPreload: string[] = [];
+    if (fetchedAlbum.cover_image) urlsToPreload.push(fetchedAlbum.cover_image);
+    const page0Media = fetchedMedia.filter(m => m.page_id === fetchedPages[0]?.id);
+    const page1Media = fetchedPages[1] ? fetchedMedia.filter(m => m.page_id === fetchedPages[1].id) : [];
+    [...page0Media, ...page1Media].forEach(m => { if (m.type === 'image') urlsToPreload.push(m.url); });
+    const preloadLinks: HTMLLinkElement[] = [];
+    urlsToPreload.forEach(url => {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.href = url;
+      link.dataset.albumPreload = '';
+      document.head.appendChild(link);
+      preloadLinks.push(link);
+    });
+
     // Check if password protected
     if (fetchedAlbum.password) {
       setIsUnlocked(false);
@@ -63,6 +82,10 @@ export default function CustomerAlbumViewerPage({ params }: ViewerPageProps) {
     }
     
     setLoading(false);
+
+    return () => {
+      preloadLinks.forEach(l => l.remove());
+    };
   }, [albumId]);
 
   const incrementAnalytics = (id: string) => {
