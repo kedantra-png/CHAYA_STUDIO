@@ -18,29 +18,24 @@ export default function AdminLoginPage() {
     setError("");
 
     try {
-      // 1. Try real Supabase live auth (only if configured)
-      if (isSupabaseConfigured) {
-        const { data, error: authError } = await supabase!.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (!authError && data.user) {
-          localStorage.setItem("chaya_admin_logged_in", "true");
-          router.push("/dashboard");
-          return;
-        }
-      }
-
-      // 2. Demo fallback
-      if (email === "admin@chaya.studio" && password === "password") {
-        localStorage.setItem("chaya_admin_logged_in", "true");
-        router.push("/dashboard");
+      if (!isSupabaseConfigured) {
+        setError("Supabase is not configured. Please set environment variables.");
         return;
       }
 
-      // If both fail, show error
-      setError("Invalid admin credentials. If you are using the real database, ensure this user exists in your Supabase Auth dashboard.");
+      const { data, error: authError } = await supabase!.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) {
+        setError(authError.message);
+        return;
+      }
+
+      if (data.user) {
+        router.push("/dashboard");
+      }
     } catch (err: any) {
       setError(err.message || "Authentication failed");
     } finally {

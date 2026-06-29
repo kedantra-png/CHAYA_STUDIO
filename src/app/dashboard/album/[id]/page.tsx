@@ -27,6 +27,7 @@ import {
   QrCode
 } from "@/components/icons";
 import { QRCodeSVG } from 'qrcode.react';
+import { supabase } from "@/lib/supabase";
 
 interface EditorPageProps {
   params: Promise<{ id: string }>;
@@ -69,13 +70,13 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
 
   // Load album
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const isLoggedIn = localStorage.getItem("chaya_admin_logged_in");
-      if (!isLoggedIn) {
+    const checkAuth = async () => {
+      const { data } = await supabase!.auth.getSession();
+      if (!data.session) {
         router.push("/auth");
-        return;
       }
-    }
+    };
+    checkAuth();
 
     const fetchedAlbum = db.getAlbum(albumId);
     if (!fetchedAlbum) {
@@ -163,6 +164,11 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
     e.preventDefault();
     if (!album || !newMediaUrl) return;
 
+    if (newMediaUrl.startsWith("Uploading")) {
+      alert("Please wait for the image to finish uploading to Supabase.");
+      return;
+    }
+
     const currentMedia = db.getMedia(album.id);
     const newItem: MediaItem = {
       id: `${album.id}-m-${Date.now()}`,
@@ -222,6 +228,11 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
   const handleAddMediaToPage = (e: React.FormEvent, pageId: string) => {
     e.preventDefault();
     if (!album || !newMediaUrlForPage) return;
+
+    if (newMediaUrlForPage.startsWith("Uploading")) {
+      alert("Please wait for the image to finish uploading to Supabase.");
+      return;
+    }
 
     const currentMedia = db.getMedia(album.id);
     const newItem: MediaItem = {
@@ -680,14 +691,25 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
                                           <input
                                             type="file"
                                             accept="image/*,video/*"
-                                            onChange={(e) => {
+                                            onChange={async (e) => {
                                               const file = e.target.files?.[0];
                                               if (file) {
-                                                const reader = new FileReader();
-                                                reader.onloadend = () => {
-                                                  setNewMediaUrlForPage(reader.result as string);
-                                                };
-                                                reader.readAsDataURL(file);
+                                                const originalUrl = newMediaUrlForPage;
+                                                setNewMediaUrlForPage("Uploading to Supabase...");
+                                                
+                                                const fileExt = file.name.split('.').pop();
+                                                const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+                                                const filePath = `${album.id}/${fileName}`;
+                                                
+                                                const { error } = await supabase.storage.from('media').upload(filePath, file);
+                                                if (error) {
+                                                  console.error("Upload failed", error);
+                                                  alert("Upload failed. Make sure your Supabase Storage bucket 'media' exists and is public.");
+                                                  setNewMediaUrlForPage(originalUrl);
+                                                } else {
+                                                  const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(filePath);
+                                                  setNewMediaUrlForPage(publicUrlData.publicUrl);
+                                                }
                                               }
                                             }}
                                             className="w-full text-[9px] text-stone-400 file:cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded-sm file:border-0 file:text-[8px] file:uppercase file:tracking-widest file:bg-[#1f1f1f] file:text-gold-primary hover:file:bg-[#2a2a2a] file:transition-colors"
@@ -735,9 +757,15 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
 
                                         <button
                                           type="submit"
-                                          className="w-full py-1 bg-gold-primary hover:bg-gold-light text-black text-[8px] tracking-widest uppercase font-bold rounded-sm shadow"
+                                          disabled={newMediaUrlForPage.startsWith("Uploading")}
+                                          className={`w-full py-1 text-[8px] tracking-widest uppercase font-bold rounded-sm shadow transition-colors ${
+                                            newMediaUrlForPage.startsWith("Uploading")
+                                              ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                                              : 'bg-gold-primary hover:bg-gold-light text-black'
+                                          }`}
+                                          id="page_media_btn_submit"
                                         >
-                                          Assign to Page
+                                          {newMediaUrlForPage.startsWith("Uploading") ? "Uploading..." : "Add Media to Page"}
                                         </button>
                                       </form>
                                     ) : (
@@ -798,7 +826,37 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[8px] uppercase text-stone-500 block">Asset URL</label>
+                      <label className="text-[8px] uppercase text-stone-500 block">Upload Local File</label>
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file && album) {
+                            const originalUrl = newMediaUrl;
+                            setNewMediaUrl("Uploading to Supabase...");
+                            
+                            const fileExt = file.name.split('.').pop();
+                            const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+                            const filePath = `${album.id}/${fileName}`;
+                            
+                            const { error } = await supabase.storage.from('media').upload(filePath, file);
+                            if (error) {
+                              console.error("Upload failed", error);
+                              alert("Upload failed. Make sure your Supabase Storage bucket 'media' exists and is public.");
+                              setNewMediaUrl(originalUrl);
+                            } else {
+                              const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(filePath);
+                              setNewMediaUrl(publicUrlData.publicUrl);
+                            }
+                          }
+                        }}
+                        className="w-full text-[9px] text-stone-400 file:cursor-pointer file:mr-2 file:py-1 file:px-2 file:rounded-sm file:border-0 file:text-[8px] file:uppercase file:tracking-widest file:bg-[#1f1f1f] file:text-gold-primary hover:file:bg-[#2a2a2a] file:transition-colors"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[8px] uppercase text-stone-500 block">Or Paste Asset URL</label>
                       <input
                         type="text"
                         required
@@ -839,10 +897,15 @@ export default function AlbumEditorPage({ params }: EditorPageProps) {
 
                     <button
                       type="submit"
-                      className="w-full py-2 bg-gold-primary hover:bg-gold-light text-black text-[9px] tracking-widest uppercase font-bold rounded-sm shadow"
+                      disabled={newMediaUrl.startsWith("Uploading")}
+                      className={`w-full py-2 text-[9px] tracking-widest uppercase font-bold rounded-sm shadow transition-colors ${
+                        newMediaUrl.startsWith("Uploading")
+                          ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                          : 'bg-gold-primary hover:bg-gold-light text-black'
+                      }`}
                       id="media_btn_submit"
                     >
-                      Import Asset
+                      {newMediaUrl.startsWith("Uploading") ? "Uploading Image... Please Wait" : "Import Asset"}
                     </button>
                   </form>
                 </div>

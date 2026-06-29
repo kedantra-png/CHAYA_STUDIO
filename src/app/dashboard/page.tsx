@@ -12,8 +12,13 @@ import {
   Search, 
   Layout, 
   Calendar,
-  ImageIcon
+  ImageIcon,
+  QrCode,
+  X,
+  Trash2
 } from "@/components/icons";
+import { QRCodeSVG } from 'qrcode.react';
+import { supabase } from "@/lib/supabase";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -27,22 +32,23 @@ export default function DashboardPage() {
   const [newLocation, setNewLocation] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newTheme, setNewTheme] = useState<'luxury' | 'modern' | 'classic'>('luxury');
+  const [showQRForAlbum, setShowQRForAlbum] = useState<Album | null>(null);
 
   useEffect(() => {
     // Auth Check
-    if (typeof window !== "undefined") {
-      const isLoggedIn = localStorage.getItem("chaya_admin_logged_in");
-      if (!isLoggedIn) {
+    const checkAuth = async () => {
+      const { data } = await supabase!.auth.getSession();
+      if (!data.session) {
         router.push("/auth");
-        return;
       }
-    }
+    };
+    checkAuth();
 
     setAlbums(db.getAlbums());
   }, [router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("chaya_admin_logged_in");
+  const handleLogout = async () => {
+    await supabase!.auth.signOut();
     router.push("/auth");
   };
 
@@ -59,6 +65,15 @@ export default function DashboardPage() {
     
     setShowCreateModal(false);
     router.push(`/dashboard/album/${newAlbum.id}`);
+  };
+
+  const handleDeleteAlbum = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to delete this album?")) {
+      db.deleteAlbum(id);
+      setAlbums(albums.filter(a => a.id !== id));
+    }
   };
 
   const filteredAlbums = albums.filter(a => 
@@ -130,6 +145,29 @@ export default function DashboardPage() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] to-transparent opacity-90" />
                     
+                    <div className="absolute top-0 right-0 p-4 w-full flex justify-end gap-2">
+                      <button
+                        onClick={(e) => handleDeleteAlbum(album.id, e)}
+                        className="w-8 h-8 rounded-full bg-black/40 backdrop-blur border border-red-500/30 flex items-center justify-center hover:bg-red-500/20 hover:border-red-500 transition-all text-red-400 opacity-0 group-hover:opacity-100 transform translate-y-[-10px] group-hover:translate-y-0"
+                        title="Delete Album"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                      {album.status === 'published' && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowQRForAlbum(album);
+                          }}
+                          className="w-8 h-8 rounded-full bg-black/40 backdrop-blur border border-gold-primary/30 flex items-center justify-center hover:bg-gold-primary/20 hover:border-gold-primary transition-all text-gold-light opacity-0 group-hover:opacity-100 transform translate-y-[-10px] group-hover:translate-y-0"
+                          title="Show QR Code"
+                        >
+                          <QrCode size={14} />
+                        </button>
+                      )}
+                    </div>
+
                     <div className="absolute bottom-0 left-0 p-5 w-full">
                       <div className="flex justify-between items-end">
                         <div>
@@ -272,6 +310,47 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRForAlbum && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#111111] border border-gold-primary/30 rounded-md shadow-2xl shadow-gold-primary/10 p-8 flex flex-col items-center max-w-sm w-full mx-4 relative">
+            <button 
+              onClick={() => setShowQRForAlbum(null)}
+              className="absolute top-4 right-4 text-stone-400 hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+            
+            <div className="w-12 h-12 rounded-full bg-gold-primary/10 flex items-center justify-center mb-6 text-gold-primary">
+              <QrCode size={24} />
+            </div>
+            
+            <h2 className="font-serif text-2xl text-white mb-2 text-center">Scan to View Album</h2>
+            <p className="text-stone-400 text-xs text-center mb-8 px-4 font-sans leading-relaxed">
+              Scan this QR code with any smartphone camera to instantly launch the immersive 3D flipbook for {showQRForAlbum.client_name}.
+            </p>
+            
+            <div className="bg-white p-4 rounded-sm shadow-inner mb-6">
+              <QRCodeSVG 
+                value={typeof window !== 'undefined' ? `${window.location.origin}${showQRForAlbum.qr_code}` : `https://chaya.studio${showQRForAlbum.qr_code}`}
+                size={200}
+                bgColor={"#ffffff"}
+                fgColor={"#000000"}
+                level={"H"}
+                includeMargin={false}
+              />
+            </div>
+            
+            <button
+              onClick={() => setShowQRForAlbum(null)}
+              className="w-full py-3 bg-gold-bg-gradient text-black font-bold text-[10px] tracking-widest uppercase rounded-sm hover:scale-[1.02] transition-all"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

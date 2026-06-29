@@ -3,10 +3,19 @@
 import React from "react";
 import Link from "next/link";
 import { Sparkles, BookOpen, Lock, Compass, Layout } from "@/components/icons";
+import InkReveal from "@/components/InkReveal";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans selection:bg-gold-primary selection:text-black overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans selection:bg-gold-primary selection:text-black overflow-x-hidden relative">
+      {/* Rainbow Background Revealed by Ink */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-500 via-red-500 via-yellow-500 via-green-500 to-blue-600 z-0 opacity-50 pointer-events-none fixed" />
+      
+      {/* Ink Reveal Overlay */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <InkReveal maskColor={[5, 5, 5]} brushSize={100} lifetime={1200} />
+      </div>
+
       {/* Background Ornaments */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-gold-primary/5 rounded-full filter blur-[150px]" />

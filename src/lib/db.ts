@@ -158,13 +158,16 @@ const getInitialPages = (albumId: string): AlbumPage[] => {
       { id: "rh-p6", album_id: albumId, page_number: 6, layout: "text-right", title: "Forever After", description: "Whispers of eternal promises underneath the golden skies." },
     ];
   }
-  return [
-    { id: `${albumId}-p1`, album_id: albumId, page_number: 1, layout: "text-left", title: "Our Story Begins", description: "Moments captured forever." },
-    { id: `${albumId}-p2`, album_id: albumId, page_number: 2, layout: "single" },
-    { id: `${albumId}-p3`, album_id: albumId, page_number: 3, layout: "double" },
-    { id: `${albumId}-p4`, album_id: albumId, page_number: 4, layout: "video" },
-    { id: `${albumId}-p5`, album_id: albumId, page_number: 5, layout: "full-spread" },
-  ];
+  if (["modern-minimalist", "classic-romance"].includes(albumId)) {
+    return [
+      { id: `${albumId}-p1`, album_id: albumId, page_number: 1, layout: "text-left", title: "Our Story Begins", description: "Moments captured forever." },
+      { id: `${albumId}-p2`, album_id: albumId, page_number: 2, layout: "single" },
+      { id: `${albumId}-p3`, album_id: albumId, page_number: 3, layout: "double" },
+      { id: `${albumId}-p4`, album_id: albumId, page_number: 4, layout: "video" },
+      { id: `${albumId}-p5`, album_id: albumId, page_number: 5, layout: "full-spread" },
+    ];
+  }
+  return []; // Empty for all custom created albums
 };
 
 const getInitialMedia = (albumId: string): MediaItem[] => {
@@ -179,13 +182,16 @@ const getInitialMedia = (albumId: string): MediaItem[] => {
       { id: "rh-m5", album_id: albumId, page_id: "rh-p5", type: "image", url: images[6], order: 5, caption: "Sunset Serenade" },
     ];
   }
-  return [
-    { id: `${albumId}-m1`, album_id: albumId, page_id: `${albumId}-p2`, type: "image", url: images[2], order: 1, caption: "Beautiful Moments" },
-    { id: `${albumId}-m2`, album_id: albumId, page_id: `${albumId}-p3`, type: "image", url: images[5], order: 2, caption: "The Ceremony" },
-    { id: `${albumId}-m3`, album_id: albumId, page_id: `${albumId}-p3`, type: "image", url: images[6], order: 3, caption: "Joyous Exit" },
-    { id: `${albumId}-m4`, album_id: albumId, page_id: `${albumId}-p4`, type: "video", url: videos[1], order: 4, caption: "Laughter and Love" },
-    { id: `${albumId}-m5`, album_id: albumId, page_id: `${albumId}-p5`, type: "image", url: images[0], order: 5, caption: "Together Forever" },
-  ];
+  if (["modern-minimalist", "classic-romance"].includes(albumId)) {
+    return [
+      { id: `${albumId}-m1`, album_id: albumId, page_id: `${albumId}-p2`, type: "image", url: images[2], order: 1, caption: "Beautiful Moments" },
+      { id: `${albumId}-m2`, album_id: albumId, page_id: `${albumId}-p3`, type: "image", url: images[5], order: 2, caption: "The Ceremony" },
+      { id: `${albumId}-m3`, album_id: albumId, page_id: `${albumId}-p3`, type: "image", url: images[6], order: 3, caption: "Joyous Exit" },
+      { id: `${albumId}-m4`, album_id: albumId, page_id: `${albumId}-p4`, type: "video", url: videos[1], order: 4, caption: "Laughter and Love" },
+      { id: `${albumId}-m5`, album_id: albumId, page_id: `${albumId}-p5`, type: "image", url: images[0], order: 5, caption: "Together Forever" },
+    ];
+  }
+  return []; // Empty for all custom created albums
 };
 
 class HybridDatabase {
@@ -218,7 +224,11 @@ class HybridDatabase {
 
   public setLocal<T>(key: string, data: T) {
     if (this.isBrowser) {
-      localStorage.setItem(key, JSON.stringify(data));
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch (e) {
+        console.warn(`Failed to save ${key} to local storage. Quota might be exceeded.`);
+      }
     }
   }
 
@@ -626,7 +636,11 @@ export const db = {
   savePages: (albumId: string, pages: AlbumPage[]) => {
     localDB.savePages(albumId, pages);
     if (typeof window !== "undefined") {
-      localStorage.setItem(`chaya_pages_${albumId}`, JSON.stringify(pages));
+      try {
+        localStorage.setItem(`chaya_pages_${albumId}`, JSON.stringify(pages));
+      } catch (e) {
+        console.warn("Storage quota exceeded for pages.");
+      }
     }
   },
 
@@ -641,7 +655,12 @@ export const db = {
   saveMedia: (albumId: string, media: MediaItem[]) => {
     localDB.saveMedia(albumId, media);
     if (typeof window !== "undefined") {
-      localStorage.setItem(`chaya_media_${albumId}`, JSON.stringify(media));
+      try {
+        localStorage.setItem(`chaya_media_${albumId}`, JSON.stringify(media));
+      } catch (e) {
+        console.warn("Storage quota exceeded for media.");
+        alert("Warning: Storage quota exceeded. The image is too large to save permanently in your browser. It will be visible for this session but may disappear upon refresh. Consider using image URLs or configuring the backend database.");
+      }
     }
   },
 
